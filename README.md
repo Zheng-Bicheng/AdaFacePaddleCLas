@@ -1,0 +1,2 @@
+# AdaFacePaddleCLas
+使用PaddleClas训练AdaFace
