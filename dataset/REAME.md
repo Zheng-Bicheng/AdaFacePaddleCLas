@@ -4,7 +4,7 @@
 如果存放数据集的目录结构为:
 ├── dataset
 │   ├── REAME.md
-│   ├── convert.py
+│   ├── mx_recordio_2_images.py
 │   └── faces_webface_112x112
 
 则把dataset目录叫做DATASET_ROOT，把faces_webface_112x112目录叫做DATASET_NAME
@@ -14,5 +14,5 @@
 2. 解压到DATASET_ROOT目录
 3. PaddleClas根目录下运行脚本命令
     ```
-   python dataset/convert.py --rec_path <DATASET_ROOT>/<DATASET_NAME> --make_image_files --make_validation_memfiles
+   python tools/mx_recordio_2_images.py --root_dir ./dataset/faces_webface_112x112/ --output_dir ./dataset/faces_webface_112x112/
    ```

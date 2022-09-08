@@ -1,12 +1,16 @@
-import paddle.vision.datasets as datasets
 from PIL import Image
 import numpy as np
 from ppcls.data.preprocess import transform as transform_func
 import os
-import json
-from paddle.io import Dataset
-import paddle
 from .common_dataset import create_operators
+import pickle
+from io import BytesIO
+
+import paddle
+import paddle.vision.datasets as datasets
+from paddle.io import Dataset
+from paddle.vision.transforms import transforms as trans
+import json
 
 
 class AdaFaceDataset(datasets.folder.ImageFolder):
@@ -34,77 +38,55 @@ class AdaFaceDataset(datasets.folder.ImageFolder):
 
 
 class FiveValidationDataset(Dataset):
-    def __init__(self, val_data_path, concat_mem_file_name):
-        '''
-        concatenates all validation datasets from emore
-        val_data_dict = {
-        'agedb_30': (agedb_30, agedb_30_issame),
-        "cfp_fp": (cfp_fp, cfp_fp_issame),
-        "lfw": (lfw, lfw_issame),
-        "cplfw": (cplfw, cplfw_issame),
-        "calfw": (calfw, calfw_issame),
-        }
-        agedb_30: 0
-        cfp_fp: 1
-        lfw: 2
-        cplfw: 3
-        calfw: 4
-        '''
-        val_data = get_val_data(val_data_path)
-        age_30, cfp_fp, lfw, age_30_issame, cfp_fp_issame, lfw_issame, cplfw, cplfw_issame, calfw, calfw_issame = val_data
-        val_data_dict = {
-            'agedb_30': (age_30, age_30_issame),
-            "cfp_fp": (cfp_fp, cfp_fp_issame),
-            "lfw": (lfw, lfw_issame),
-            "cplfw": (cplfw, cplfw_issame),
-            "calfw": (calfw, calfw_issame),
-        }
-        self.dataname_to_idx = {
-            "agedb_30": 0,
-            "cfp_fp": 1,
-            "lfw": 2,
-            "cplfw": 3,
-            "calfw": 4
-        }
+    def __init__(self, val_data_path):
+        super(FiveValidationDataset, self).__init__()
+        self.val_data_path = val_data_path
 
-        self.val_data_dict = val_data_dict
-        # concat all dataset
-        all_imgs = []
-        all_issame = []
-        all_dataname = []
-        key_orders = []
-        for key, (imgs, issame) in val_data_dict.items():
-            all_imgs.append(imgs)
-            dup_issame = [
-            ]  # hacky way to make the issame length same as imgs. [1, 1, 0, 0, ...]
-            for same in issame:
-                dup_issame.append(same)
-                dup_issame.append(same)
-            all_issame.append(dup_issame)
-            all_dataname.append([self.dataname_to_idx[key]] * len(imgs))
-            key_orders.append(key)
-        assert key_orders == ['agedb_30', 'cfp_fp', 'lfw', 'cplfw', 'calfw']
+        data_memmap_path = os.path.join(self.val_data_path, "concat_data.dat")
+        issame_list_memmap_path = os.path.join(self.val_data_path, "concat_issame_list.dat")
+        all_dataname_memmap_path = os.path.join(self.val_data_path, "concat_all_dataname.dat")
+        if not os.path.exists(data_memmap_path):
+            # create memfiles
+            self.val_targets = ["agedb_30", "cfp_fp", "lfw", "cplfw", "calfw"]
+            self.val_data_dict = {}
+            self.get_val_data(image_size=(112, 112))
 
-        self.concat_mem_file_name = concat_mem_file_name
-        if isinstance(all_imgs[0], np.memmap):
-            if not os.path.isfile(self.concat_mem_file_name):
-                # create a concat memfile
-                concat = []
-                for key in ['agedb_30', 'cfp_fp', 'lfw', 'cplfw', 'calfw']:
-                    np_array, issame = val_data_dict[key]
-                    # np_array, issame = get_val_pair(
-                    #     path=os.path.join(self.data_root, self.val_data_path),
-                    #     name=key,
-                    #     use_memfile=False)
-                    concat.append(np_array)
-                concat = np.concatenate(concat)
-                make_memmap(self.concat_mem_file_name, concat)
-            self.all_imgs = read_memmap(concat_mem_file_name)
-        else:
-            self.all_imgs = np.concatenate(all_imgs)
+            self.dataname_to_idx = {
+                "agedb_30": 0,
+                "cfp_fp": 1,
+                "lfw": 2,
+                "cplfw": 3,
+                "calfw": 4
+            }
+            # create concat memfiles
+            concat_dataname = []
+            key_orders = []
+            concat_data = []
+            concat_issame_list = []
+            for key, (np_array, issame) in self.val_data_dict.items():
+                key_orders.append(key)
+                concat_dataname.append([self.dataname_to_idx[key]] * len(np_array))
+                concat_data.append(np_array)
+                dup_issame = []  # hacky way to make the issame length same as imgs. [1, 1, 0, 0, ...]
+                for same in issame:
+                    dup_issame.append(same)
+                    dup_issame.append(same)
+                concat_issame_list.append(dup_issame)
+            assert key_orders == ['agedb_30', 'cfp_fp', 'lfw', 'cplfw', 'calfw']
+            concat_data = np.concatenate(concat_data)
+            make_memmap(data_memmap_path, concat_data)
+            del concat_data
 
-        self.all_issame = np.concatenate(all_issame)
-        self.all_dataname = np.concatenate(all_dataname)
+            concat_issame_list = np.concatenate(concat_issame_list)
+            make_memmap(issame_list_memmap_path, concat_issame_list)
+            del concat_issame_list
+
+            concat_dataname = np.concatenate(concat_dataname)
+            make_memmap(all_dataname_memmap_path, concat_dataname)
+            del concat_dataname
+        self.all_imgs = read_memmap(data_memmap_path)
+        self.all_issame = read_memmap(issame_list_memmap_path)
+        self.all_dataname = read_memmap(all_dataname_memmap_path)
 
     def __getitem__(self, index):
         x_np = self.all_imgs[index].copy()
@@ -116,46 +98,39 @@ class FiveValidationDataset(Dataset):
     def __len__(self):
         return len(self.all_imgs)
 
-
-def read_memmap(mem_file_name):
-    # r+ mode: Open existing file for reading and writing
-    with open(mem_file_name + '.conf', 'r') as file:
-        memmap_configs = json.load(file)
-        return np.memmap(mem_file_name, mode='r+',
-                         shape=tuple(memmap_configs['shape']),
-                         dtype=memmap_configs['dtype'])
-
-
-def get_val_pair(path, name, use_memfile=True):
-    # installing bcolz should set proxy to access internet
-    import bcolz
-    if use_memfile:
-        mem_file_dir = os.path.join(path, name, 'memfile')
-        mem_file_name = os.path.join(mem_file_dir, 'mem_file.dat')
-        if os.path.isdir(mem_file_dir):
-            print('laoding validation data memfile')
-            np_array = read_memmap(mem_file_name)
-        else:
-            os.makedirs(mem_file_dir)
-            carray = bcolz.carray(rootdir=os.path.join(path, name), mode='r')
-            np_array = np.array(carray)
-            mem_array = make_memmap(mem_file_name, np_array)
-            del np_array, mem_array
-            np_array = read_memmap(mem_file_name)
-    else:
-        np_array = bcolz.carray(rootdir=os.path.join(path, name), mode='r')
-
-    issame = np.load(os.path.join(path, '{}_list.npy'.format(name)))
-    return np_array, issame
+    def get_val_data(self, image_size):
+        for val_name in self.val_targets:
+            load_path = os.path.join(self.val_data_path, val_name + ".bin")
+            data_memmap_path = os.path.join(self.val_data_path, val_name + "_data.dat")
+            issame_list_memmap_path = os.path.join(self.val_data_path, val_name + "_issame_list.dat")
+            if not os.path.exists(data_memmap_path):
+                print("正在读取文件[{}]".format(load_path))
+                data, issame_list = load_bin(load_path, image_size)
+                make_memmap(data_memmap_path, data.astype('float32'))
+                make_memmap(issame_list_memmap_path, issame_list)
+                del data, issame_list
+            np_array = read_memmap(data_memmap_path)
+            issame_list = read_memmap(issame_list_memmap_path)
+            self.val_data_dict[val_name] = (np_array, issame_list)
 
 
-def get_val_data(data_path):
-    agedb_30, agedb_30_issame = get_val_pair(data_path, 'agedb_30')
-    cfp_fp, cfp_fp_issame = get_val_pair(data_path, 'cfp_fp')
-    lfw, lfw_issame = get_val_pair(data_path, 'lfw')
-    cplfw, cplfw_issame = get_val_pair(data_path, 'cplfw')
-    calfw, calfw_issame = get_val_pair(data_path, 'calfw')
-    return agedb_30, cfp_fp, lfw, agedb_30_issame, cfp_fp_issame, lfw_issame, cplfw, cplfw_issame, calfw, calfw_issame
+def load_bin(path, image_size):
+    # test_transform = trans.Compose([
+    #     trans.ToTensor(),
+    #     trans.Normalize([0.5, 0.5, 0.5], [0.5, 0.5, 0.5])
+    # ])
+    bins, issame_list = pickle.load(open(path, 'rb'), encoding='bytes')
+    data = np.empty((len(bins), 1, 3, image_size[0], image_size[1]))
+    for i in range(len(bins)):
+        _bin_1 = bins[i]
+        img_ori = Image.open(BytesIO(_bin_1))
+        if img_ori.mode != 'RGB':
+            img_ori = img_ori.convert('RGB')
+        img_ori = np.array(img_ori).astype('float32').transpose((2, 0, 1))
+        img_ori = (img_ori - 127.5) * 0.00784313725
+        # data[i, ...] = test_transform(img_ori)
+        data[i, ...] = img_ori
+    return data.reshape((len(bins), 3, image_size[0], image_size[1])), np.array(issame_list)
 
 
 def make_memmap(mem_file_name, np_to_copy):
@@ -168,3 +143,12 @@ def make_memmap(mem_file_name, np_to_copy):
     mm[:] = np_to_copy[:]
     mm.flush()  # memmap data flush
     return mm
+
+
+def read_memmap(mem_file_name):
+    # r+ mode: Open existing file for reading and writing
+    with open(mem_file_name + '.conf', 'r') as file:
+        memmap_configs = json.load(file)
+        return np.memmap(mem_file_name, mode='r+',
+                         shape=tuple(memmap_configs['shape']),
+                         dtype=memmap_configs['dtype'])

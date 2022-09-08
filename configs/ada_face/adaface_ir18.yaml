@@ -3,11 +3,12 @@ Global:
   checkpoints: null
   pretrained_model: null
   output_dir: "./output/"
-  device: "gpu"
+#  device: "gpu"
+  device: "cpu"
   save_interval: 1
   eval_during_train: True
   eval_interval: 1
-  epochs: 28
+  epochs: 30
   print_batch_step: 10
   use_visualdl: False
   # used for static mode and model export
@@ -44,7 +45,7 @@ Optimizer:
   lr:
     name: Piecewise
     learning_rate: 0.1
-    decay_epochs: [10, 18, 24]
+    decay_epochs: [10, 16, 22]
     values: [0.1, 0.01, 0.001, 0.0001]
   regularizer:
     name: 'L2'
@@ -89,7 +90,6 @@ DataLoader:
     dataset:
       name: FiveValidationDataset
       val_data_path: ./dataset/faces_webface_112x112/
-      concat_mem_file_name: ./dataset/faces_webface_112x112/concat_validation_memfile
     sampler:
         name: BatchSampler
         batch_size: 256
