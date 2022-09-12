@@ -14,5 +14,5 @@
 2. 解压到DATASET_ROOT目录
 3. PaddleClas根目录下运行脚本命令
     ```
-   python tools/mx_recordio_2_images.py --root_dir ./dataset/faces_webface_112x112/ --output_dir ./dataset/faces_webface_112x112/
+   python dataset/mx_recordio_2_images.py --root_dir ./dataset/faces_webface_112x112/ --output_dir ./dataset/faces_webface_112x112/
    ```

@@ -1,82 +1,55 @@
-# Copyright (c) 2021 PaddlePaddle Authors. All Rights Reserved.
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
-
+import mxnet as mx
+from tqdm import tqdm
+from PIL import Image
+import cv2
+import numbers
 import os
 import argparse
-import numpy as np
-import numbers
-import mxnet as mx
-import cv2
-import tqdm
-import shutil
+from pathlib import Path
 
 
-def main(args):
-    path_imgrec = os.path.join(args.root_dir, 'train.rec')
-    path_imgidx = os.path.join(args.root_dir, 'train.idx')
-    imgrec = mx.recordio.MXIndexedRecordIO(path_imgidx, path_imgrec, 'r')
-    s = imgrec.read_idx(0)
-    header, _ = mx.recordio.unpack(s)
-    if header.flag > 0:
-        header0 = (int(header.label[0]), int(header.label[1]))
-        imgidx = np.array(range(1, int(header.label[0])))
-    else:
-        imgidx = np.array(list(imgrec.keys))
+def save_rec_to_img_dir(rec_path, swap_color_channel=False, save_as_png=False):
+    save_path = rec_path / os.path.basename(rec_path)
+    if not save_path.exists():
+        save_path.mkdir()
+    imgrec = mx.recordio.MXIndexedRecordIO(str(rec_path / 'train.idx'), str(rec_path / 'train.rec'), 'r')
+    img_info = imgrec.read_idx(0)
+    header, _ = mx.recordio.unpack(img_info)
+    max_idx = int(header.label[0])
+    for idx in tqdm(range(1, max_idx)):
+        img_info = imgrec.read_idx(idx)
+        header, img = mx.recordio.unpack_img(img_info)
+        if not isinstance(header.label, numbers.Number):
+            label = int(header.label[0])
+        else:
+            label = int(header.label)
 
-    classes = set()
-    os.makedirs(os.path.join(args.output_dir, 'images'), exist_ok=True)
-    fp = open(os.path.join(args.output_dir, 'label.txt'), 'w')
-    for idx in tqdm.tqdm(imgidx):
-        s = imgrec.read_idx(idx)
-        header, img = mx.recordio.unpack(s)
-        label = header.label
-        if not isinstance(label, numbers.Number):
-            label = label[0]
-        img = mx.image.imdecode(img).asnumpy()[..., ::-1]
-        label = int(label)
-        classes.add(label)
+        img = cv2.cvtColor(img, cv2.COLOR_RGB2BGR)
+        if swap_color_channel:
+            # this option saves the image in the right color.
+            # but the training code uses PIL (RGB)
+            # and validation code uses Cv2 (BGR)
+            # so we want to turn this off to deliberately swap the color channel order.
+            img = cv2.cvtColor(img, cv2.COLOR_RGB2BGR)
 
-        filename = 'images/%08d.jpg' % idx
-        fp.write('%s\t%d\n' % (filename, label))
-        cv2.imwrite(
-            os.path.join(args.output_dir, filename), img,
-            [int(cv2.IMWRITE_JPEG_QUALITY), 100])
-    fp.close()
-    shutil.copy(
-        os.path.join(args.root_dir, 'agedb_30.bin'),
-        os.path.join(args.output_dir, 'agedb_30.bin'))
-    shutil.copy(
-        os.path.join(args.root_dir, 'cfp_fp.bin'),
-        os.path.join(args.output_dir, 'cfp_fp.bin'))
-    shutil.copy(
-        os.path.join(args.root_dir, 'lfw.bin'),
-        os.path.join(args.output_dir, 'lfw.bin'))
-    print('num_image: ', len(imgidx), 'num_classes: ', len(classes))
-    with open(os.path.join(args.output_dir, 'README.md'), 'w') as f:
-        f.write('num_image: {}\n'.format(len(imgidx)))
-        f.write('num_classes: {}\n'.format(len(classes)))
+        img = Image.fromarray(img)
+        label_path = save_path / str(label)
+        if not label_path.exists():
+            label_path.mkdir()
+
+        if save_as_png:
+            img_save_path = label_path / '{}.png'.format(idx)
+            img.save(img_save_path)
+        else:
+            img_save_path = label_path / '{}.jpg'.format(idx)
+            img.save(img_save_path, quality=95)
 
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument(
-        "--root_dir",
-        type=str,
-        help="Root directory to mxnet dataset.", )
-    parser.add_argument(
-        "--output_dir",
-        type=str,
-        help="Path to output.", )
+    parser.add_argument("-r", "--rec_path", help="mxnet record file path", default='./faces_emore', type=str)
+    parser.add_argument("--swap_color_channel", action='store_true')
     args = parser.parse_args()
-    main(args)
+
+    rec_path = Path(args.rec_path)
+    save_rec_to_img_dir(rec_path, swap_color_channel=args.swap_color_channel)

@@ -22,3 +22,17 @@ V0.1 -> 2022-09-09
 * 数据集重新上传了一个小型化的数据集，方便在AIStudio中解压，同时占用更少的内存空间
 * 缩减了需要的requirements
 * 修复了V0.0版本验证时精度偏小的问题
+
+V1.0 -> 2022-09-09
+
+更新内容:
+* 修复dataset/README.md文档的错误
+* 修正了jupyter-notebook中训练部分代码的错误
+* 新增MobileFacenet backbone
+* 整理了一下jupyter-notebook
+
+V1.1 -> 2022-09-10
+
+更新内容:
+* 修复部分小bug
+* jupyter-notebook排版进行更新，对读者更友好。
