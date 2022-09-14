@@ -7,7 +7,7 @@ Global:
   save_interval: 1
   eval_during_train: True
   eval_interval: 1
-  epochs: 28
+  epochs: 25
   print_batch_step: 10
   use_visualdl: False
   # used for static mode and model export
@@ -21,12 +21,12 @@ Arch:
   infer_output_key: "features"
   infer_add_softmax: False
   Backbone:
-    name: "AdaFace_IR_18"
-    input_size: [112, 112]
+    name: "MobileFaceNet_128"
+    num_features: 512
   Head:
     name: "AdaMargin"
     embedding_size: 512
-    class_num: 10572
+    class_num: 85742
     m: 0.4
     s: 64
     h: 0.333
@@ -44,7 +44,7 @@ Optimizer:
   lr:
     name: Piecewise
     learning_rate: 0.1
-    decay_epochs: [10, 18, 24]
+    decay_epochs: [7, 13, 19]
     values: [0.1, 0.01, 0.001, 0.0001]
   regularizer:
     name: 'L2'
@@ -55,7 +55,7 @@ DataLoader:
   Train:
     dataset:
         name: "AdaFaceDataset"
-        root: "./dataset/face_webface_112x112/faces_webface_112x112/imgs"
+        root: "./dataset/faces_emore/faces_emore"
         transform:
           - CropWithPadding:
               prob: 0.2
@@ -78,7 +78,7 @@ DataLoader:
               std: [0.5, 0.5, 0.5]
     sampler:
         name: DistributedBatchSampler
-        batch_size: 448
+        batch_size: 512
         drop_last: False
         shuffle: True
     loader:
@@ -88,14 +88,14 @@ DataLoader:
   Eval:
     dataset:
       name: FiveValidationDataset
-      val_data_path: ./dataset/face_webface_112x112/faces_webface_112x112
+      val_data_path: ./dataset/faces_emore
     sampler:
         name: BatchSampler
         batch_size: 256
         drop_last: False
         shuffle: True
     loader:
-        num_workers: 4
+        num_workers: 5
         use_shared_memory: True
 Metric:
   Train:
